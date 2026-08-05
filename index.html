@@ -45,6 +45,32 @@
             margin-bottom: 20px;
         }
 
+        .settings {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .settings label {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            font-size: 16px;
+            color: white;
+        }
+
+        .settings input {
+            width: 90px;
+            padding: 6px 8px;
+            margin-top: 4px;
+            font-size: 16px;
+            border-radius: 4px;
+            border: none;
+            text-align: right;
+        }
+
         button {
             font-size: 24px;
             padding: 15px 30px;
@@ -54,6 +80,21 @@
 </head>
 
 <body>
+
+    <div class="settings">
+        <label>
+            運動時間
+            <input id="workTimeInput" type="number" min="1" step="1" value="20">
+        </label>
+        <label>
+            休憩時間
+            <input id="restTimeInput" type="number" min="1" step="1" value="10">
+        </label>
+        <label>
+            セット数
+            <input id="totalSetsInput" type="number" min="1" step="1" value="8">
+        </label>
+    </div>
 
     <div id="setInfo">セット 1 / 8</div>
 
@@ -180,6 +221,22 @@
             }, 1000);
         }
 
+        function applySettings() {
+            const newWork = parseInt(document.getElementById("workTimeInput").value, 10);
+            const newRest = parseInt(document.getElementById("restTimeInput").value, 10);
+            const newSets = parseInt(document.getElementById("totalSetsInput").value, 10);
+
+            if (Number.isNaN(newWork) || newWork < 1) return;
+            if (Number.isNaN(newRest) || newRest < 1) return;
+            if (Number.isNaN(newSets) || newSets < 1) return;
+
+            workTime = newWork;
+            restTime = newRest;
+            totalSets = newSets;
+
+            resetTimer();
+        }
+
         function resetTimer() {
 
             clearInterval(timerId);
@@ -199,8 +256,12 @@
                 .textContent = workTime;
 
             document.getElementById("setInfo")
-                .textContent = "セット 1 / 8";
+                .textContent = `セット ${currentSet} / ${totalSets}`;
         }
+
+        document.getElementById("workTimeInput").addEventListener("change", applySettings);
+        document.getElementById("restTimeInput").addEventListener("change", applySettings);
+        document.getElementById("totalSetsInput").addEventListener("change", applySettings);
 
     </script>
 
