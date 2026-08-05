@@ -82,35 +82,47 @@
             justify-content: center;
             gap: 10px;
         }
+
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 
 <body>
 
-    <div class="settings">
-        <label>
-            運動時間
-            <input id="workTimeInput" type="number" min="1" step="1" value="20">
-        </label>
-        <label>
-            休憩時間
-            <input id="restTimeInput" type="number" min="1" step="1" value="10">
-        </label>
-        <label>
-            セット数
-            <input id="totalSetsInput" type="number" min="1" step="1" value="8">
-        </label>
+    <div id="settingsScreen">
+        <div class="settings">
+            <label>
+                運動時間
+                <input id="workTimeInput" type="number" min="1" step="1" value="20">
+            </label>
+            <label>
+                休憩時間
+                <input id="restTimeInput" type="number" min="1" step="1" value="10">
+            </label>
+            <label>
+                セット数
+                <input id="totalSetsInput" type="number" min="1" step="1" value="8">
+            </label>
+        </div>
+
+        <div id="controls">
+            <button id="startButton" onclick="startTimer()">開始</button>
+            <button id="resetButton" onclick="resetTimer()">リセット</button>
+        </div>
     </div>
 
-    <div id="setInfo">セット 1 / 8</div>
+    <div id="timerScreen" class="hidden">
+        <div id="setInfo">セット 1 / 8</div>
 
-    <div id="phase">運動</div>
+        <div id="phase">運動</div>
 
-    <div id="timer">20</div>
+        <div id="timer">20</div>
 
-    <div id="controls">
-        <button id="startButton" onclick="toggleTimer()">開始</button>
-        <button id="resetButton" onclick="resetTimer()">リセット</button>
+        <div id="controls">
+            <button id="pauseButton" onclick="pauseTimer()">一時停止</button>
+        </div>
     </div>
 
     <script>
@@ -148,30 +160,31 @@
             );
         }
 
-        async function toggleTimer() {
-            if (timerId) {
-                pauseTimer();
-            } else {
-                await startTimer();
-            }
+        function showSettingsScreen() {
+            document.getElementById("settingsScreen").classList.remove("hidden");
+            document.getElementById("timerScreen").classList.add("hidden");
+        }
+
+        function showTimerScreen() {
+            document.getElementById("settingsScreen").classList.add("hidden");
+            document.getElementById("timerScreen").classList.remove("hidden");
         }
 
         function pauseTimer() {
             clearInterval(timerId);
             timerId = null;
+            showSettingsScreen();
             document.getElementById("startButton").textContent = "開始";
-            document.getElementById("resetButton").style.display = "inline-block";
         }
 
         async function startTimer() {
-            document.getElementById("resetButton").style.display = "none";
-
             if (timerId) return;
 
-            document.getElementById("startButton").textContent = "一時停止";
+            applySettings();
+            showTimerScreen();
+            document.getElementById("pauseButton").textContent = "一時停止";
 
             if ('wakeLock' in navigator) {
-
                 try {
                     await navigator.wakeLock.request('screen');
                 } catch (e) { }
@@ -214,8 +227,8 @@
 
                             clearInterval(timerId);
                             timerId = null;
+                            showSettingsScreen();
                             document.getElementById("startButton").textContent = "開始";
-                            document.getElementById("resetButton").style.display = "inline-block";
 
                             document.body.className = "finish";
 
@@ -261,7 +274,13 @@
             restTime = newRest;
             totalSets = newSets;
 
-            resetTimer();
+            currentSet = 1;
+            currentTime = workTime;
+            isWork = true;
+
+            document.getElementById("phase").textContent = "運動";
+            document.getElementById("timer").textContent = workTime;
+            document.getElementById("setInfo").textContent = `セット ${currentSet} / ${totalSets}`;
         }
 
         function resetTimer() {
@@ -269,8 +288,8 @@
             clearInterval(timerId);
 
             timerId = null;
+            showSettingsScreen();
             document.getElementById("startButton").textContent = "開始";
-            document.getElementById("resetButton").style.display = "inline-block";
 
             currentSet = 1;
             currentTime = workTime;
