@@ -119,11 +119,17 @@
         <div class="settings">
             <label>
                 運動時間
-                <input id="workTimeInput" type="number" min="1" step="1" value="20">
+                <div>
+                    <input id="workMinutesInput" type="number" min="0" step="1" value="0" style="width:60px;"> 分
+                    <input id="workSecondsInput" type="number" min="0" max="59" step="1" value="20" style="width:60px;"> 秒
+                </div>
             </label>
             <label>
                 休憩時間
-                <input id="restTimeInput" type="number" min="1" step="1" value="10">
+                <div>
+                    <input id="restMinutesInput" type="number" min="0" step="1" value="0" style="width:60px;"> 分
+                    <input id="restSecondsInput" type="number" min="0" max="59" step="1" value="10" style="width:60px;"> 秒
+                </div>
             </label>
             <label>
                 セット数
@@ -252,7 +258,7 @@
                 currentTime--;
 
                 document.getElementById("timer")
-                    .textContent = currentTime;
+                    .textContent = formatTime(currentTime);
 
                 if (
                     currentTime === 15 ||
@@ -313,23 +319,27 @@
                     }
 
                     document.getElementById("timer")
-                        .textContent = currentTime;
+                        .textContent = formatTime(currentTime);
                 }
 
             }, 1000);
         }
 
         function applySettings() {
-            const newWork = parseInt(document.getElementById("workTimeInput").value, 10);
-            const newRest = parseInt(document.getElementById("restTimeInput").value, 10);
+            const workMin = parseInt(document.getElementById("workMinutesInput").value, 10);
+            const workSec = parseInt(document.getElementById("workSecondsInput").value, 10);
+            const restMin = parseInt(document.getElementById("restMinutesInput").value, 10);
+            const restSec = parseInt(document.getElementById("restSecondsInput").value, 10);
             const newSets = parseInt(document.getElementById("totalSetsInput").value, 10);
 
-            if (Number.isNaN(newWork) || newWork < 1) return;
-            if (Number.isNaN(newRest) || newRest < 1) return;
+            if (Number.isNaN(workMin) || workMin < 0) return;
+            if (Number.isNaN(workSec) || workSec < 0 || workSec > 59) return;
+            if (Number.isNaN(restMin) || restMin < 0) return;
+            if (Number.isNaN(restSec) || restSec < 0 || restSec > 59) return;
             if (Number.isNaN(newSets) || newSets < 1) return;
 
-            workTime = newWork;
-            restTime = newRest;
+            workTime = workMin * 60 + workSec;
+            restTime = restMin * 60 + restSec;
             totalSets = newSets;
 
             currentSet = 1;
@@ -337,8 +347,17 @@
             isWork = true;
 
             document.getElementById("phase").textContent = "運動";
-            document.getElementById("timer").textContent = workTime;
+            document.getElementById("timer").textContent = formatTime(workTime);
             document.getElementById("setInfo").textContent = `セット ${currentSet} / ${totalSets}`;
+        }
+
+        function formatTime(seconds) {
+            if (seconds < 60) {
+                return String(seconds);
+            }
+            const minutes = Math.floor(seconds / 60);
+            const sec = seconds % 60;
+            return `${minutes}:${sec.toString().padStart(2, '0')}`;
         }
 
         function resetTimer() {
@@ -362,14 +381,15 @@
                 .textContent = "運動";
 
             document.getElementById("timer")
-                .textContent = workTime;
-
+                        .textContent = formatTime(workTime);
             document.getElementById("setInfo")
                 .textContent = `セット ${currentSet} / ${totalSets}`;
         }
 
-        document.getElementById("workTimeInput").addEventListener("change", applySettings);
-        document.getElementById("restTimeInput").addEventListener("change", applySettings);
+        document.getElementById("workMinutesInput").addEventListener("change", applySettings);
+        document.getElementById("workSecondsInput").addEventListener("change", applySettings);
+        document.getElementById("restMinutesInput").addEventListener("change", applySettings);
+        document.getElementById("restSecondsInput").addEventListener("change", applySettings);
         document.getElementById("totalSetsInput").addEventListener("change", applySettings);
 
     </script>
