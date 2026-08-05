@@ -185,6 +185,8 @@
         function showSettingsScreen() {
             document.getElementById("settingsScreen").classList.remove("hidden");
             document.getElementById("timerScreen").classList.add("hidden");
+            document.getElementById("timerResetButton").classList.add("hidden");
+            document.getElementById("pauseButton").textContent = "一時停止";
         }
 
         function showTimerScreen() {
@@ -339,8 +341,8 @@
 
             timerId = null;
             isPaused = false;
-            document.getElementById("pauseButton").classList.remove("hidden");
             document.getElementById("timerResetButton").classList.add("hidden");
+            document.getElementById("pauseButton").classList.remove("hidden");
             showSettingsScreen();
             document.getElementById("startButton").textContent = "開始";
 
