@@ -204,6 +204,14 @@
 
         window.addEventListener("DOMContentLoaded", () => {
             showSettingsScreen();
+
+            window.addEventListener("keydown", (event) => {
+                if (event.code !== 'Space') return;
+                const timerScreen = document.getElementById("timerScreen");
+                if (timerScreen.classList.contains("hidden")) return;
+                event.preventDefault();
+                togglePause();
+            });
         });
 
         let isPaused = false;
