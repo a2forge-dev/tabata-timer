@@ -88,13 +88,21 @@
             margin: 10px;
         }
 
-        #controls {
+        .controls {
             display: flex;
             justify-content: center;
             gap: 10px;
             width: 100%;
             flex-wrap: wrap;
+        }
+
+        .screen {
+            display: flex;
+            flex-direction: column;
             justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100vh;
         }
 
         .hidden {
@@ -105,7 +113,7 @@
 
 <body>
 
-    <div id="settingsScreen">
+    <div id="settingsScreen" class="screen">
         <div class="settings">
             <label>
                 運動時間
@@ -121,19 +129,19 @@
             </label>
         </div>
 
-        <div id="controls">
+        <div class="controls">
             <button id="startButton" onclick="startTimer()">開始</button>
         </div>
     </div>
 
-    <div id="timerScreen" class="hidden">
+    <div id="timerScreen" class="screen hidden">
         <div id="setInfo">セット 1 / 8</div>
 
         <div id="phase">運動</div>
 
         <div id="timer">20</div>
 
-        <div id="controls">
+        <div class="controls">
             <button id="pauseButton" onclick="togglePause()">一時停止</button>
             <button id="timerResetButton" class="hidden" onclick="resetTimer()">リセット</button>
         </div>
