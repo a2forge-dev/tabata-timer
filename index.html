@@ -12,21 +12,21 @@
     <style>
         body {
             margin: 0;
-            font-family: sans-serif;
+            font-family: 'Yu Gothic', 'Meiryo', 'Segoe UI', Arial, sans-serif;
             position: relative;
             min-height: 100vh;
             overflow: hidden;
-            color: white;
-            background: #d32f2f;
+            color: rgb(255, 0, 0);
+            background: #000;
             transition: .3s;
         }
 
         body.rest {
-            background: #1976d2;
+            background: #000;
         }
 
         body.finish {
-            background: #2e7d32;
+            background: #000;
         }
 
         #phase {
@@ -34,8 +34,10 @@
         }
 
         #timer {
-            font-size: 120px;
+            font-family: 'Segoe UI', 'Yu Gothic', 'Meiryo', sans-serif;
+            font-size: 240px;
             font-weight: bold;
+            letter-spacing: normal;
         }
 
         #setInfo {
@@ -166,28 +168,11 @@
         let isWork = true;
         let timerId = null;
 
-        function beep(freq, duration) {
-
-            const ctx =
-                new (window.AudioContext ||
-                    window.webkitAudioContext)();
-
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-
-            osc.frequency.value = freq;
-
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-
-            gain.gain.value = 0.2;
-
-            osc.start();
-
-            osc.stop(
-                ctx.currentTime +
-                duration / 1000
-            );
+        function playSound(path) {
+            const audio = new Audio(path);
+            audio.play().catch(() => {
+                // ignore playback errors on some browsers
+            });
         }
 
         function showSettingsScreen() {
@@ -268,17 +253,13 @@
                 document.getElementById("timer")
                     .textContent = formatTime(currentTime);
 
-                if (
-                    currentTime === 15 ||
-                    currentTime === 14 ||
-                    currentTime === 13
-                ) {
-                    beep(1200, 100);
+                if (currentTime === 15) {
+                    playSound('audio/Buzzer_long.mp3');
                 }
 
                 if (currentTime <= 0) {
 
-                    beep(700, 500);
+                    playSound('audio/Buzzer_short_double.mp3');
 
                     if (isWork) {
 
