@@ -123,14 +123,16 @@
                 運動時間
                 <div>
                     <input id="workMinutesInput" type="number" min="0" step="1" value="0" style="width:60px;"> 分
-                    <input id="workSecondsInput" type="number" min="0" max="59" step="1" value="20" style="width:60px;"> 秒
+                    <input id="workSecondsInput" type="number" min="0" max="59" step="1" value="20" style="width:60px;">
+                    秒
                 </div>
             </label>
             <label>
                 休憩時間
                 <div>
                     <input id="restMinutesInput" type="number" min="0" step="1" value="0" style="width:60px;"> 分
-                    <input id="restSecondsInput" type="number" min="0" max="59" step="1" value="10" style="width:60px;"> 秒
+                    <input id="restSecondsInput" type="number" min="0" max="59" step="1" value="10" style="width:60px;">
+                    秒
                 </div>
             </label>
             <label>
@@ -254,12 +256,12 @@
                     .textContent = formatTime(currentTime);
 
                 if (currentTime === 15) {
-                    playSound('audio/Buzzer_long.mp3');
+                    playSound('audio/Buzzer_short_double.mp3');
                 }
 
                 if (currentTime <= 0) {
 
-                    playSound('audio/Buzzer_short_double.mp3');
+                    playSound('audio/Buzzer_long.mp3');
 
                     if (isWork) {
 
@@ -370,7 +372,7 @@
                 .textContent = "運動";
 
             document.getElementById("timer")
-                        .textContent = formatTime(workTime);
+                .textContent = formatTime(workTime);
             document.getElementById("setInfo")
                 .textContent = `セット ${currentSet} / ${totalSets}`;
         }
