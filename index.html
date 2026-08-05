@@ -109,7 +109,6 @@
 
         <div id="controls">
             <button id="startButton" onclick="startTimer()">開始</button>
-            <button id="resetButton" onclick="resetTimer()">リセット</button>
         </div>
     </div>
 
@@ -121,7 +120,8 @@
         <div id="timer">20</div>
 
         <div id="controls">
-            <button id="pauseButton" onclick="pauseTimer()">一時停止</button>
+            <button id="pauseButton" onclick="togglePause()">一時停止</button>
+            <button id="timerResetButton" class="hidden" onclick="resetTimer()">リセット</button>
         </div>
     </div>
 
@@ -170,11 +170,30 @@
             document.getElementById("timerScreen").classList.remove("hidden");
         }
 
+        let isPaused = false;
+
+        function togglePause() {
+            if (timerId) {
+                pauseTimer();
+            } else {
+                resumeTimer();
+            }
+        }
+
         function pauseTimer() {
             clearInterval(timerId);
             timerId = null;
-            showSettingsScreen();
-            document.getElementById("startButton").textContent = "開始";
+            isPaused = true;
+            document.getElementById("pauseButton").textContent = "再開";
+            document.getElementById("timerResetButton").classList.remove("hidden");
+        }
+
+        function resumeTimer() {
+            if (timerId) return;
+            isPaused = false;
+            document.getElementById("pauseButton").textContent = "一時停止";
+            document.getElementById("timerResetButton").classList.add("hidden");
+            startInterval();
         }
 
         async function startTimer() {
@@ -183,6 +202,14 @@
             applySettings();
             showTimerScreen();
             document.getElementById("pauseButton").textContent = "一時停止";
+            document.getElementById("timerResetButton").classList.add("hidden");
+            isPaused = false;
+
+            startInterval();
+        }
+
+        async function startInterval() {
+            if (timerId) return;
 
             if ('wakeLock' in navigator) {
                 try {
@@ -227,8 +254,9 @@
 
                             clearInterval(timerId);
                             timerId = null;
-                            showSettingsScreen();
-                            document.getElementById("startButton").textContent = "開始";
+                            isPaused = false;
+                            document.getElementById("pauseButton").classList.add("hidden");
+                            document.getElementById("timerResetButton").classList.remove("hidden");
 
                             document.body.className = "finish";
 
@@ -288,6 +316,9 @@
             clearInterval(timerId);
 
             timerId = null;
+            isPaused = false;
+            document.getElementById("pauseButton").classList.remove("hidden");
+            document.getElementById("timerResetButton").classList.add("hidden");
             showSettingsScreen();
             document.getElementById("startButton").textContent = "開始";
 
