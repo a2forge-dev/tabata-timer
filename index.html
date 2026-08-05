@@ -103,7 +103,7 @@
     <div id="timer">20</div>
 
     <div>
-        <button onclick="startTimer()">開始</button>
+        <button id="startButton" onclick="toggleTimer()">開始</button>
         <button onclick="resetTimer()">リセット</button>
     </div>
 
@@ -142,9 +142,25 @@
             );
         }
 
+        async function toggleTimer() {
+            if (timerId) {
+                pauseTimer();
+            } else {
+                await startTimer();
+            }
+        }
+
+        function pauseTimer() {
+            clearInterval(timerId);
+            timerId = null;
+            document.getElementById("startButton").textContent = "開始";
+        }
+
         async function startTimer() {
 
             if (timerId) return;
+
+            document.getElementById("startButton").textContent = "一時停止";
 
             if ('wakeLock' in navigator) {
 
@@ -189,6 +205,8 @@
                         if (currentSet > totalSets) {
 
                             clearInterval(timerId);
+                            timerId = null;
+                            document.getElementById("startButton").textContent = "開始";
 
                             document.body.className = "finish";
 
@@ -242,6 +260,7 @@
             clearInterval(timerId);
 
             timerId = null;
+            document.getElementById("startButton").textContent = "開始";
 
             currentSet = 1;
             currentTime = workTime;
