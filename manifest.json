@@ -1,0 +1,15 @@
+{
+    "name": "Tabata Timer",
+    "short_name": "Tabata",
+    "start_url": "./",
+    "display": "standalone",
+    "background_color": "#d32f2f",
+    "theme_color": "#d32f2f",
+    "icons": [
+        {
+            "src": "icon.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
