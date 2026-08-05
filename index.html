@@ -13,11 +13,9 @@
         body {
             margin: 0;
             font-family: sans-serif;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+            position: relative;
+            min-height: 100vh;
+            overflow: hidden;
             color: white;
             background: #d32f2f;
             transition: .3s;
@@ -62,14 +60,18 @@
             color: white;
         }
 
-        #settingsScreen,
-        #timerScreen {
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            width: 100%;
-            height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
         }
 
         .settings input {
@@ -193,6 +195,10 @@
             document.getElementById("settingsScreen").classList.add("hidden");
             document.getElementById("timerScreen").classList.remove("hidden");
         }
+
+        window.addEventListener("DOMContentLoaded", () => {
+            showSettingsScreen();
+        });
 
         let isPaused = false;
 
