@@ -76,6 +76,12 @@
             padding: 15px 30px;
             margin: 10px;
         }
+
+        #controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
     </style>
 </head>
 
@@ -102,9 +108,9 @@
 
     <div id="timer">20</div>
 
-    <div>
+    <div id="controls">
         <button id="startButton" onclick="toggleTimer()">開始</button>
-        <button onclick="resetTimer()">リセット</button>
+        <button id="resetButton" onclick="resetTimer()">リセット</button>
     </div>
 
     <script>
@@ -154,9 +160,11 @@
             clearInterval(timerId);
             timerId = null;
             document.getElementById("startButton").textContent = "開始";
+            document.getElementById("resetButton").style.display = "inline-block";
         }
 
         async function startTimer() {
+            document.getElementById("resetButton").style.display = "none";
 
             if (timerId) return;
 
@@ -207,6 +215,7 @@
                             clearInterval(timerId);
                             timerId = null;
                             document.getElementById("startButton").textContent = "開始";
+                            document.getElementById("resetButton").style.display = "inline-block";
 
                             document.body.className = "finish";
 
@@ -261,6 +270,7 @@
 
             timerId = null;
             document.getElementById("startButton").textContent = "開始";
+            document.getElementById("resetButton").style.display = "inline-block";
 
             currentSet = 1;
             currentTime = workTime;
