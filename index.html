@@ -296,6 +296,7 @@
 
         <div class="controls">
             <button id="pauseButton" onclick="togglePause()">一時停止</button>
+            <button id="timerMusicToggleButton" type="button" class="music-small-button">音楽再生</button>
             <button id="timerResetButton" class="hidden" onclick="resetTimer()">リセット</button>
         </div>
     </div>
@@ -403,6 +404,7 @@
         function updateMusicDisplay() {
             const musicStatus = document.getElementById('musicStatus');
             const button = document.getElementById('musicToggleButton');
+            const timerButton = document.getElementById('timerMusicToggleButton');
             const list = document.getElementById('musicPlaylist');
 
             if (!musicStatus || !button || !list) return;
@@ -410,6 +412,9 @@
             musicIsPlaying = Boolean(musicAudio && !musicAudio.paused && musicAudio.src);
             musicStatus.textContent = `音楽登録数（${musicTracks.length}曲）`;
             button.textContent = musicIsPlaying ? '一時停止' : '再生';
+            if (timerButton) {
+                timerButton.textContent = musicIsPlaying ? '音楽停止' : '音楽再生';
+            }
 
             list.innerHTML = '';
 
@@ -1105,6 +1110,7 @@
             const musicFileInput = document.getElementById('musicFileInput');
             const musicModeSelect = document.getElementById('musicModeSelect');
             const musicToggleButton = document.getElementById('musicToggleButton');
+            const timerMusicToggleButton = document.getElementById('timerMusicToggleButton');
 
             musicAddButton.addEventListener('click', () => {
                 musicFileInput.click();
@@ -1128,6 +1134,12 @@
             musicToggleButton.addEventListener('click', () => {
                 musicController.togglePlayback();
             });
+
+            if (timerMusicToggleButton) {
+                timerMusicToggleButton.addEventListener('click', () => {
+                    musicController.togglePlayback();
+                });
+            }
         }
 
         window.addEventListener("DOMContentLoaded", () => {
