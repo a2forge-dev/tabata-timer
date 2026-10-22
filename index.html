@@ -327,7 +327,8 @@
         let musicAudio = null;
         let musicCurrentIndex = -1;
         let lastRandomIndex = -1;
-        let nextMusicIndexToPlay = -1;
+        let musicIsPlaying = false;
+        let currentMusicObjectUrl = '';
 
         function showStatus(message, isError = false) {
             const element = document.getElementById('statusMessage');
@@ -391,8 +392,9 @@
 
             if (!musicStatus || !button || !list) return;
 
+            musicIsPlaying = Boolean(musicAudio && !musicAudio.paused && musicAudio.src);
             musicStatus.textContent = `音楽登録数（${musicTracks.length}曲）`;
-            button.textContent = musicAudio && !musicAudio.paused && musicIsPlaying ? '一時停止' : '再生';
+            button.textContent = musicIsPlaying ? '一時停止' : '再生';
 
             list.innerHTML = '';
 
@@ -453,39 +455,10 @@
             document.getElementById("pauseButton").classList.add("hidden");
             document.getElementById("timerResetButton").classList.remove("hidden");
             document.getElementById("timerResetButton").textContent = 'リセット';
-            document.getElementById("timerResetButton").classList.remove("hidden");
             document.body.className = 'finish';
             currentTime = 0;
             updateTimerDisplay();
             musicController.stopPlayback();
-        }
-
-        async function startTimer() {
-            if (timerId) return;
-
-            applySettings();
-            showTimerScreen();
-            document.getElementById("pauseButton").textContent = "一時停止";
-            document.getElementById("timerResetButton").classList.add("hidden");
-            document.getElementById("pauseButton").classList.remove("hidden");
-            isPaused = false;
-
-            currentSet = 1;
-            isWork = true;
-
-            if (startGraceTime > 0 && !graceUsedInCurrentSession) {
-                timerPhase = 'ready';
-                currentTime = startGraceTime;
-                graceUsedInCurrentSession = true;
-            } else {
-                timerPhase = 'work';
-                currentTime = workTime;
-            }
-
-            setBodyClassForPhase();
-            updateTimerDisplay();
-            musicController.requestPlayOnTimerStart();
-            startInterval();
         }
 
         function togglePause() {
@@ -510,6 +483,33 @@
             isPaused = false;
             document.getElementById("pauseButton").textContent = "一時停止";
             document.getElementById("timerResetButton").classList.add("hidden");
+            startInterval();
+        }
+
+        async function startTimer() {
+            if (timerId) return;
+
+            applySettings();
+            showTimerScreen();
+            document.getElementById("pauseButton").textContent = "一時停止";
+            document.getElementById("timerResetButton").classList.add("hidden");
+            document.getElementById("pauseButton").classList.remove("hidden");
+            isPaused = false;
+
+            currentSet = 1;
+            isWork = true;
+
+            if (startGraceTime > 0 && !graceUsedInCurrentSession) {
+                timerPhase = 'ready';
+                currentTime = startGraceTime;
+                graceUsedInCurrentSession = true;
+            } else {
+                beginWorkPhase();
+            }
+
+            setBodyClassForPhase();
+            updateTimerDisplay();
+            musicController.requestPlayOnTimerStart();
             startInterval();
         }
 
@@ -604,7 +604,7 @@
         }
 
         function resetTimer() {
-            const wasRunning = timerPhase !== 'initial' && timerPhase !== 'finished' && !isPaused;
+            const shouldStopMusic = timerPhase !== 'initial' && timerPhase !== 'finished' && !isPaused;
 
             clearInterval(timerId);
             timerId = null;
@@ -614,7 +614,7 @@
             showSettingsScreen();
             document.getElementById("startButton").textContent = "開始";
 
-            if (wasRunning) {
+            if (shouldStopMusic) {
                 musicController.stopPlayback();
             }
 
@@ -764,9 +764,21 @@
 
         function getTrackUrl(track) {
             return new Promise((resolve, reject) => {
+                if (track.objectUrl && track.objectUrl.startsWith('blob:')) {
+                    resolve(track.objectUrl);
+                    return;
+                }
+
                 if (track.file instanceof Blob) {
-                    const url = URL.createObjectURL(track.file);
-                    resolve(url);
+                    const objectUrl = URL.createObjectURL(track.file);
+                    resolve(objectUrl);
+                    return;
+                }
+
+                if (track.data instanceof ArrayBuffer) {
+                    const blob = new Blob([track.data], { type: track.mimeType || track.type || 'audio/*' });
+                    const objectUrl = URL.createObjectURL(blob);
+                    resolve(objectUrl);
                     return;
                 }
 
@@ -780,23 +792,9 @@
         }
 
         const musicController = {
-            async initialize() {
-                try {
-                    await openMusicDatabase();
-                    const savedPlayMode = await loadMusicSettings();
-                    if (savedPlayMode === 'random' || savedPlayMode === 'sequence') {
-                        musicPlayMode = savedPlayMode;
-                    }
-                    const storedTracks = await loadSavedTracks();
-                    musicTracks = storedTracks;
-                    document.getElementById('musicModeSelect').value = musicPlayMode;
-                    updateMusicDisplay();
-                } catch (error) {
-                    showStatus(error.message || '音楽の保存機能を利用できません。', true);
-                }
-            },
+            currentIndex: -1,
 
-            setupAudioElement() {
+            ensureAudio() {
                 if (!musicAudio) {
                     musicAudio = new Audio();
                     musicAudio.preload = 'auto';
@@ -809,11 +807,27 @@
                         this.stopPlayback();
                     });
                 }
+                return musicAudio;
+            },
+
+            async initialize() {
+                try {
+                    await openMusicDatabase();
+                    const savedPlayMode = await loadMusicSettings();
+                    if (savedPlayMode === 'random' || savedPlayMode === 'sequence') {
+                        musicPlayMode = savedPlayMode;
+                    }
+                    document.getElementById('musicModeSelect').value = musicPlayMode;
+                    await loadSavedTracks();
+                    updateMusicDisplay();
+                } catch (error) {
+                    showStatus(error.message || '音楽の保存機能を利用できません。', true);
+                }
             },
 
             async requestPlayOnTimerStart() {
                 if (!musicTracks.length) return;
-                this.setupAudioElement();
+                this.ensureAudio();
 
                 if (this.currentIndex === -1) {
                     const nextIndex = this.getNextTrackIndex(-1);
@@ -825,7 +839,7 @@
                 if (musicAudio.paused) {
                     try {
                         await musicAudio.play();
-                        musicCurrentIndex = this.currentIndex;
+                        musicIsPlaying = true;
                         updateMusicDisplay();
                     } catch (error) {
                         showStatus('音楽の再生に失敗しました。音源を再登録してください。', true);
@@ -834,7 +848,7 @@
             },
 
             async togglePlayback() {
-                this.setupAudioElement();
+                this.ensureAudio();
 
                 if (!musicTracks.length) {
                     showStatus('音楽ファイルが未登録です。追加してください。', true);
@@ -851,32 +865,46 @@
 
                     try {
                         await musicAudio.play();
+                        musicIsPlaying = true;
                         updateMusicDisplay();
                     } catch (error) {
-                        showStatus('再生に失敗しました。音源を再登録してください。', true);
+                        const message = (error && error.name === 'NotAllowedError')
+                            ? 'ブラウザが自動再生をブロックしました。再生ボタンをもう一度押してください。'
+                            : '再生に失敗しました。音源を再登録してください。';
+                        showStatus(message, true);
                     }
                     return;
                 }
 
                 musicAudio.pause();
+                musicIsPlaying = false;
                 updateMusicDisplay();
             },
 
             async playTrackAtIndex(index) {
                 if (!musicTracks[index]) return;
-                this.setupAudioElement();
+                this.ensureAudio();
 
                 try {
                     const track = musicTracks[index];
                     const objectUrl = await getTrackUrl(track);
+                    if (currentMusicObjectUrl && currentMusicObjectUrl.startsWith('blob:')) {
+                        URL.revokeObjectURL(currentMusicObjectUrl);
+                    }
+                    currentMusicObjectUrl = objectUrl;
+                    track.objectUrl = objectUrl;
                     musicAudio.src = objectUrl;
                     musicAudio.load();
                     await musicAudio.play();
                     musicCurrentIndex = index;
                     this.currentIndex = index;
+                    musicIsPlaying = true;
                     updateMusicDisplay();
                 } catch (error) {
-                    showStatus(error.message || '音楽データを取得できませんでした。再登録してください。', true);
+                    const message = (error && error.name === 'NotAllowedError')
+                        ? 'ブラウザが自動再生をブロックしました。再生ボタンをもう一度押してください。'
+                        : (error && error.message) || '音楽データを取得できませんでした。再登録してください。';
+                    showStatus(message, true);
                     this.stopPlayback();
                 }
             },
@@ -928,12 +956,18 @@
             },
 
             stopPlayback() {
-                if (!musicAudio) return;
-                musicAudio.pause();
-                musicAudio.currentTime = 0;
-                musicAudio.src = '';
+                if (musicAudio) {
+                    musicAudio.pause();
+                    musicAudio.currentTime = 0;
+                    musicAudio.src = '';
+                }
+                if (currentMusicObjectUrl && currentMusicObjectUrl.startsWith('blob:')) {
+                    URL.revokeObjectURL(currentMusicObjectUrl);
+                    currentMusicObjectUrl = '';
+                }
                 musicCurrentIndex = -1;
                 this.currentIndex = -1;
+                musicIsPlaying = false;
                 updateMusicDisplay();
             },
 
@@ -954,14 +988,19 @@
                     return;
                 }
 
-                const preparedTracks = validFiles.map((file) => ({
-                    id: generateTrackId(),
-                    name: file.name,
-                    file,
-                    size: file.size,
-                    type: file.type || 'audio/*',
-                    order: Date.now() + Math.random()
-                }));
+                const preparedTracks = [];
+                for (const file of validFiles) {
+                    const data = await file.arrayBuffer();
+                    preparedTracks.push({
+                        id: generateTrackId(),
+                        name: file.name,
+                        data,
+                        mimeType: file.type || 'audio/*',
+                        size: file.size,
+                        type: file.type || 'audio/*',
+                        order: Date.now() + Math.random()
+                    });
+                }
 
                 try {
                     await saveTracksToDatabase(preparedTracks);
@@ -978,8 +1017,8 @@
                 if (targetIndex < 0) return;
 
                 const track = musicTracks[targetIndex];
-                if (track && track.url && track.url.startsWith('blob:')) {
-                    URL.revokeObjectURL(track.url);
+                if (track.objectUrl && track.objectUrl.startsWith('blob:')) {
+                    URL.revokeObjectURL(track.objectUrl);
                 }
 
                 try {
@@ -989,9 +1028,11 @@
                     if (musicCurrentIndex === targetIndex) {
                         musicCurrentIndex = -1;
                         this.currentIndex = -1;
-                        musicAudio.pause();
-                        musicAudio.currentTime = 0;
-                        musicAudio.src = '';
+                        if (musicAudio) {
+                            musicAudio.pause();
+                            musicAudio.currentTime = 0;
+                            musicAudio.src = '';
+                        }
                     } else if (musicCurrentIndex > targetIndex) {
                         musicCurrentIndex -= 1;
                         this.currentIndex = musicCurrentIndex;
