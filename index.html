@@ -76,7 +76,8 @@
             box-sizing: border-box;
         }
 
-        .settings input {
+        .settings input,
+        .settings select {
             width: 90px;
             padding: 6px 8px;
             margin-top: 4px;
@@ -112,6 +113,107 @@
         .hidden {
             display: none;
         }
+
+        .music-panel {
+            width: min(760px, calc(100vw - 32px));
+            margin-top: 12px;
+            padding: 14px 18px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            box-sizing: border-box;
+            color: white;
+        }
+
+        .music-header,
+        .music-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .music-toolbar {
+            margin-top: 12px;
+        }
+
+        .music-status {
+            margin-top: 8px;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .music-playlist {
+            list-style: none;
+            margin: 12px 0 0;
+            padding: 0;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+
+        .music-playlist li {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+
+        .music-playlist li.current-track {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+        }
+
+        .music-track-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .music-delete-button {
+            font-size: 14px;
+            padding: 8px 12px;
+            margin: 0;
+            border-radius: 6px;
+        }
+
+        .music-small-button {
+            font-size: 16px;
+            padding: 10px 16px;
+            margin: 0;
+        }
+
+        .status-message {
+            min-height: 22px;
+            margin-top: 8px;
+            font-size: 14px;
+            color: #ffdede;
+        }
+
+        .status-message.error {
+            color: #ffb4b4;
+        }
+
+        @media (max-width: 640px) {
+            #timer {
+                font-size: 150px;
+            }
+
+            button {
+                font-size: 20px;
+                padding: 12px 22px;
+            }
+
+            .music-panel {
+                width: calc(100vw - 20px);
+                padding: 12px;
+            }
+        }
     </style>
 </head>
 
@@ -139,6 +241,36 @@
                 セット数
                 <input id="totalSetsInput" type="number" min="1" step="1" value="8">
             </label>
+            <label>
+                開始余裕時間
+                <div>
+                    <input id="startGraceSecondsInput" type="number" min="0" max="300" step="1" value="3" style="width:60px;">
+                    秒
+                </div>
+            </label>
+        </div>
+
+        <div id="musicPanel" class="music-panel">
+            <div class="music-header">
+                <strong>音楽プレイヤー</strong>
+                <div class="music-toolbar">
+                    <button id="musicToggleButton" type="button" class="music-small-button">再生</button>
+                    <label>
+                        <span>再生方式</span>
+                        <select id="musicModeSelect">
+                            <option value="sequence">順番再生</option>
+                            <option value="random">ランダム再生</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+            <div id="musicStatus" class="music-status">音楽未登録（0曲）</div>
+            <div class="music-toolbar">
+                <input id="musicFileInput" type="file" accept=".mp3,.wav,.m4a,.aac,.ogg,.mp4,.webm,audio/*" multiple hidden>
+                <button id="musicAddButton" type="button" class="music-small-button">音楽を追加</button>
+            </div>
+            <ul id="musicPlaylist" class="music-playlist"></ul>
+            <div id="statusMessage" class="status-message" aria-live="polite"></div>
         </div>
 
         <div class="controls">
@@ -161,14 +293,55 @@
 
     <script>
 
+        const MUSIC_DB_NAME = 'tabataTimerMusicDb';
+        const MUSIC_DB_VERSION = 1;
+        const SUPPORTED_MUSIC_TYPES = [
+            'audio/mpeg',
+            'audio/mp3',
+            'audio/wav',
+            'audio/x-wav',
+            'audio/ogg',
+            'audio/aac',
+            'audio/m4a',
+            'audio/mp4',
+            'audio/webm'
+        ];
+        const SUPPORTED_MUSIC_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.mp4', '.webm'];
+
         let workTime = 20;
         let restTime = 10;
         let totalSets = 8;
+        let startGraceTime = 3;
 
         let currentSet = 1;
         let currentTime = workTime;
         let isWork = true;
         let timerId = null;
+        let isPaused = false;
+        let timerPhase = 'initial';
+        let graceUsedInCurrentSession = false;
+
+        let musicDb = null;
+        let musicTracks = [];
+        let musicPlayMode = 'sequence';
+        let musicAudio = null;
+        let musicCurrentIndex = -1;
+        let lastRandomIndex = -1;
+        let nextMusicIndexToPlay = -1;
+
+        function showStatus(message, isError = false) {
+            const element = document.getElementById('statusMessage');
+            if (!element) return;
+            element.textContent = message;
+            element.classList.toggle('error', isError);
+            if (message) {
+                clearTimeout(showStatus.timeoutId);
+                showStatus.timeoutId = setTimeout(() => {
+                    element.textContent = '';
+                    element.classList.remove('error');
+                }, 4000);
+            }
+        }
 
         function playSound(path) {
             const audio = new Audio(path);
@@ -182,6 +355,7 @@
             document.getElementById("timerScreen").classList.add("hidden");
             document.getElementById("timerResetButton").classList.add("hidden");
             document.getElementById("pauseButton").textContent = "一時停止";
+            document.getElementById("pauseButton").classList.remove("hidden");
         }
 
         function showTimerScreen() {
@@ -189,21 +363,133 @@
             document.getElementById("timerScreen").classList.remove("hidden");
         }
 
-        window.addEventListener("DOMContentLoaded", () => {
-            showSettingsScreen();
+        function updateTimerDisplay() {
+            const phaseElement = document.getElementById('phase');
+            const timerElement = document.getElementById('timer');
+            const setElement = document.getElementById('setInfo');
 
-            window.addEventListener("keydown", (event) => {
-                if (event.code !== 'Space') return;
-                const timerScreen = document.getElementById("timerScreen");
-                if (timerScreen.classList.contains("hidden")) return;
-                event.preventDefault();
-                togglePause();
+            if (timerPhase === 'ready') {
+                phaseElement.textContent = '開始前';
+            } else if (timerPhase === 'work') {
+                phaseElement.textContent = '運動';
+            } else if (timerPhase === 'rest') {
+                phaseElement.textContent = '休憩';
+            } else if (timerPhase === 'finished') {
+                phaseElement.textContent = '終了';
+            } else {
+                phaseElement.textContent = '運動';
+            }
+
+            timerElement.textContent = formatTime(currentTime);
+            setElement.textContent = `セット ${currentSet} / ${totalSets}`;
+        }
+
+        function updateMusicDisplay() {
+            const musicStatus = document.getElementById('musicStatus');
+            const button = document.getElementById('musicToggleButton');
+            const list = document.getElementById('musicPlaylist');
+
+            if (!musicStatus || !button || !list) return;
+
+            musicStatus.textContent = `音楽登録数（${musicTracks.length}曲）`;
+            button.textContent = musicAudio && !musicAudio.paused && musicIsPlaying ? '一時停止' : '再生';
+
+            list.innerHTML = '';
+
+            musicTracks.forEach((track, index) => {
+                const item = document.createElement('li');
+                if (index === musicCurrentIndex) {
+                    item.classList.add('current-track');
+                }
+
+                const name = document.createElement('span');
+                name.className = 'music-track-name';
+                name.textContent = track.name;
+
+                const deleteButton = document.createElement('button');
+                deleteButton.type = 'button';
+                deleteButton.className = 'music-delete-button';
+                deleteButton.textContent = '削除';
+                deleteButton.addEventListener('click', () => removeTrack(track.id));
+
+                item.appendChild(name);
+                item.appendChild(deleteButton);
+                list.appendChild(item);
             });
-        });
+        }
 
-        let isPaused = false;
+        function setBodyClassForPhase() {
+            if (timerPhase === 'rest') {
+                document.body.className = 'rest';
+            } else if (timerPhase === 'finished') {
+                document.body.className = 'finish';
+            } else {
+                document.body.className = '';
+            }
+        }
+
+        function beginWorkPhase() {
+            currentSet = Math.max(1, currentSet);
+            timerPhase = 'work';
+            isWork = true;
+            currentTime = workTime;
+            setBodyClassForPhase();
+            updateTimerDisplay();
+        }
+
+        function beginRestPhase() {
+            timerPhase = 'rest';
+            isWork = false;
+            currentTime = restTime;
+            setBodyClassForPhase();
+            updateTimerDisplay();
+        }
+
+        function finishTimer() {
+            clearInterval(timerId);
+            timerId = null;
+            isPaused = false;
+            timerPhase = 'finished';
+            document.getElementById("pauseButton").classList.add("hidden");
+            document.getElementById("timerResetButton").classList.remove("hidden");
+            document.getElementById("timerResetButton").textContent = 'リセット';
+            document.getElementById("timerResetButton").classList.remove("hidden");
+            document.body.className = 'finish';
+            currentTime = 0;
+            updateTimerDisplay();
+            musicController.stopPlayback();
+        }
+
+        async function startTimer() {
+            if (timerId) return;
+
+            applySettings();
+            showTimerScreen();
+            document.getElementById("pauseButton").textContent = "一時停止";
+            document.getElementById("timerResetButton").classList.add("hidden");
+            document.getElementById("pauseButton").classList.remove("hidden");
+            isPaused = false;
+
+            currentSet = 1;
+            isWork = true;
+
+            if (startGraceTime > 0 && !graceUsedInCurrentSession) {
+                timerPhase = 'ready';
+                currentTime = startGraceTime;
+                graceUsedInCurrentSession = true;
+            } else {
+                timerPhase = 'work';
+                currentTime = workTime;
+            }
+
+            setBodyClassForPhase();
+            updateTimerDisplay();
+            musicController.requestPlayOnTimerStart();
+            startInterval();
+        }
 
         function togglePause() {
+            if (timerPhase === 'finished' || timerPhase === 'initial') return;
             if (timerId) {
                 pauseTimer();
             } else {
@@ -227,92 +513,54 @@
             startInterval();
         }
 
-        async function startTimer() {
-            if (timerId) return;
-
-            applySettings();
-            showTimerScreen();
-            document.getElementById("pauseButton").textContent = "一時停止";
-            document.getElementById("timerResetButton").classList.add("hidden");
-            isPaused = false;
-
-            startInterval();
-        }
-
-        async function startInterval() {
+        function startInterval() {
             if (timerId) return;
 
             if ('wakeLock' in navigator) {
                 try {
-                    await navigator.wakeLock.request('screen');
-                } catch (e) { }
+                    navigator.wakeLock.request('screen').catch(() => {});
+                } catch (e) {
+                    // ignore wake lock issues
+                }
             }
 
             timerId = setInterval(() => {
-
-                currentTime--;
-
-                document.getElementById("timer")
-                    .textContent = formatTime(currentTime);
-
-                if (currentTime === 15) {
-                    playSound('audio/Buzzer_short_double.mp3');
+                if (currentTime > 0) {
+                    currentTime--;
                 }
 
-                if (currentTime <= 0) {
+                if (timerPhase === 'ready') {
+                    if (currentTime <= 0) {
+                        playSound('audio/Buzzer_long.mp3');
+                        beginWorkPhase();
+                        return;
+                    }
+                } else if (timerPhase === 'work' || timerPhase === 'rest') {
+                    if (currentTime === 15 && timerPhase !== 'ready') {
+                        playSound('audio/Buzzer_short_double.mp3');
+                    }
 
-                    playSound('audio/Buzzer_long.mp3');
+                    if (currentTime <= 0) {
+                        playSound('audio/Buzzer_long.mp3');
 
-                    if (isWork) {
-
-                        isWork = false;
-                        currentTime = restTime;
-
-                        document.body.className = "rest";
-
-                        document.getElementById("phase")
-                            .textContent = "休憩";
-
-                    } else {
-
-                        currentSet++;
-
-                        if (currentSet > totalSets) {
-
-                            clearInterval(timerId);
-                            timerId = null;
-                            isPaused = false;
-                            document.getElementById("pauseButton").classList.add("hidden");
-                            document.getElementById("timerResetButton").classList.remove("hidden");
-
-                            document.body.className = "finish";
-
-                            document.getElementById("phase")
-                                .textContent = "終了";
-
-                            document.getElementById("timer")
-                                .textContent = "0";
-
+                        if (timerPhase === 'work') {
+                            beginRestPhase();
                             return;
                         }
 
-                        isWork = true;
-                        currentTime = workTime;
-
-                        document.body.className = "";
-
-                        document.getElementById("phase")
-                            .textContent = "運動";
-
-                        document.getElementById("setInfo")
-                            .textContent =
-                            `セット ${currentSet} / ${totalSets}`;
+                        if (timerPhase === 'rest') {
+                            currentSet += 1;
+                            if (currentSet > totalSets) {
+                                finishTimer();
+                                return;
+                            }
+                            beginWorkPhase();
+                            return;
+                        }
                     }
-
-                    document.getElementById("timer")
-                        .textContent = formatTime(currentTime);
                 }
 
+                updateTimerDisplay();
             }, 1000);
         }
 
@@ -322,20 +570,24 @@
             const restMin = parseInt(document.getElementById("restMinutesInput").value, 10);
             const restSec = parseInt(document.getElementById("restSecondsInput").value, 10);
             const newSets = parseInt(document.getElementById("totalSetsInput").value, 10);
+            const graceSec = parseInt(document.getElementById("startGraceSecondsInput").value, 10);
 
             if (Number.isNaN(workMin) || workMin < 0) return;
             if (Number.isNaN(workSec) || workSec < 0 || workSec > 59) return;
             if (Number.isNaN(restMin) || restMin < 0) return;
             if (Number.isNaN(restSec) || restSec < 0 || restSec > 59) return;
             if (Number.isNaN(newSets) || newSets < 1) return;
+            if (Number.isNaN(graceSec) || graceSec < 0 || graceSec > 300) return;
 
             workTime = workMin * 60 + workSec;
             restTime = restMin * 60 + restSec;
             totalSets = newSets;
+            startGraceTime = graceSec;
 
             currentSet = 1;
             currentTime = workTime;
             isWork = true;
+            timerPhase = 'initial';
 
             document.getElementById("phase").textContent = "運動";
             document.getElementById("timer").textContent = formatTime(workTime);
@@ -352,9 +604,9 @@
         }
 
         function resetTimer() {
+            const wasRunning = timerPhase !== 'initial' && timerPhase !== 'finished' && !isPaused;
 
             clearInterval(timerId);
-
             timerId = null;
             isPaused = false;
             document.getElementById("timerResetButton").classList.add("hidden");
@@ -362,19 +614,20 @@
             showSettingsScreen();
             document.getElementById("startButton").textContent = "開始";
 
+            if (wasRunning) {
+                musicController.stopPlayback();
+            }
+
             currentSet = 1;
             currentTime = workTime;
             isWork = true;
+            timerPhase = 'initial';
+            graceUsedInCurrentSession = false;
 
-            document.body.className = "";
-
-            document.getElementById("phase")
-                .textContent = "運動";
-
-            document.getElementById("timer")
-                .textContent = formatTime(workTime);
-            document.getElementById("setInfo")
-                .textContent = `セット ${currentSet} / ${totalSets}`;
+            document.body.className = '';
+            document.getElementById("phase").textContent = "運動";
+            document.getElementById("timer").textContent = formatTime(workTime);
+            document.getElementById("setInfo").textContent = `セット ${currentSet} / ${totalSets}`;
         }
 
         document.getElementById("workMinutesInput").addEventListener("change", applySettings);
@@ -382,6 +635,419 @@
         document.getElementById("restMinutesInput").addEventListener("change", applySettings);
         document.getElementById("restSecondsInput").addEventListener("change", applySettings);
         document.getElementById("totalSetsInput").addEventListener("change", applySettings);
+        document.getElementById("startGraceSecondsInput").addEventListener("change", applySettings);
+
+        function isSupportedMusicFile(file) {
+            const extension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+            const type = file.type ? file.type.toLowerCase() : '';
+            return SUPPORTED_MUSIC_TYPES.includes(type) || SUPPORTED_MUSIC_EXTENSIONS.includes(extension);
+        }
+
+        function generateTrackId() {
+            const cryptoObject = window.crypto || window.msCrypto;
+            if (cryptoObject && cryptoObject.randomUUID) {
+                return cryptoObject.randomUUID();
+            }
+            return `track-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
+
+        function openMusicDatabase() {
+            return new Promise((resolve, reject) => {
+                if (!('indexedDB' in window)) {
+                    reject(new Error('このブラウザはIndexedDBに対応していません。'));
+                    return;
+                }
+
+                const request = indexedDB.open(MUSIC_DB_NAME, MUSIC_DB_VERSION);
+
+                request.onupgradeneeded = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains('tracks')) {
+                        db.createObjectStore('tracks', { keyPath: 'id' });
+                    }
+                    if (!db.objectStoreNames.contains('settings')) {
+                        db.createObjectStore('settings', { keyPath: 'key' });
+                    }
+                };
+
+                request.onsuccess = () => {
+                    musicDb = request.result;
+                    resolve();
+                };
+
+                request.onerror = () => {
+                    reject(request.error || new Error('IndexedDBの開始に失敗しました。'));
+                };
+            });
+        }
+
+        function storeMusicSettings(key, value) {
+            return new Promise((resolve, reject) => {
+                if (!musicDb) {
+                    resolve();
+                    return;
+                }
+
+                const transaction = musicDb.transaction('settings', 'readwrite');
+                const store = transaction.objectStore('settings');
+                const request = store.put({ key, value });
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error || new Error('再生方式の保存に失敗しました。'));
+            });
+        }
+
+        function loadMusicSettings() {
+            return new Promise((resolve, reject) => {
+                if (!musicDb) {
+                    resolve(null);
+                    return;
+                }
+
+                const transaction = musicDb.transaction('settings', 'readonly');
+                const store = transaction.objectStore('settings');
+                const request = store.get('playMode');
+                request.onsuccess = () => resolve(request.result ? request.result.value : null);
+                request.onerror = () => reject(request.error || new Error('再生方式の読込に失敗しました。'));
+            });
+        }
+
+        function loadSavedTracks() {
+            return new Promise((resolve, reject) => {
+                if (!musicDb) {
+                    resolve([]);
+                    return;
+                }
+
+                const transaction = musicDb.transaction('tracks', 'readonly');
+                const store = transaction.objectStore('tracks');
+                const request = store.getAll();
+                request.onsuccess = () => {
+                    const tracks = (request.result || []).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                    musicTracks = tracks;
+                    resolve(tracks);
+                };
+                request.onerror = () => reject(request.error || new Error('保存済み音楽の読込に失敗しました。'));
+            });
+        }
+
+        function saveTracksToDatabase(tracks) {
+            return new Promise((resolve, reject) => {
+                if (!musicDb) {
+                    resolve();
+                    return;
+                }
+
+                const transaction = musicDb.transaction('tracks', 'readwrite');
+                const store = transaction.objectStore('tracks');
+
+                tracks.forEach((track) => store.put(track));
+
+                transaction.oncomplete = () => resolve();
+                transaction.onerror = () => reject(transaction.error || new Error('音楽の保存に失敗しました。'));
+            });
+        }
+
+        function deleteTrackFromDatabase(trackId) {
+            return new Promise((resolve, reject) => {
+                if (!musicDb) {
+                    resolve();
+                    return;
+                }
+
+                const transaction = musicDb.transaction('tracks', 'readwrite');
+                const store = transaction.objectStore('tracks');
+                const request = store.delete(trackId);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error || new Error('音楽の削除に失敗しました。'));
+            });
+        }
+
+        function getTrackUrl(track) {
+            return new Promise((resolve, reject) => {
+                if (track.file instanceof Blob) {
+                    const url = URL.createObjectURL(track.file);
+                    resolve(url);
+                    return;
+                }
+
+                if (track.url) {
+                    resolve(track.url);
+                    return;
+                }
+
+                reject(new Error('音楽データを取得できませんでした。再登録してください。'));
+            });
+        }
+
+        const musicController = {
+            async initialize() {
+                try {
+                    await openMusicDatabase();
+                    const savedPlayMode = await loadMusicSettings();
+                    if (savedPlayMode === 'random' || savedPlayMode === 'sequence') {
+                        musicPlayMode = savedPlayMode;
+                    }
+                    const storedTracks = await loadSavedTracks();
+                    musicTracks = storedTracks;
+                    document.getElementById('musicModeSelect').value = musicPlayMode;
+                    updateMusicDisplay();
+                } catch (error) {
+                    showStatus(error.message || '音楽の保存機能を利用できません。', true);
+                }
+            },
+
+            setupAudioElement() {
+                if (!musicAudio) {
+                    musicAudio = new Audio();
+                    musicAudio.preload = 'auto';
+                    musicAudio.volume = 0.8;
+                    musicAudio.addEventListener('ended', () => {
+                        this.advanceToNextTrack();
+                    });
+                    musicAudio.addEventListener('error', () => {
+                        showStatus('音楽の再生に失敗しました。音源を再登録してください。', true);
+                        this.stopPlayback();
+                    });
+                }
+            },
+
+            async requestPlayOnTimerStart() {
+                if (!musicTracks.length) return;
+                this.setupAudioElement();
+
+                if (this.currentIndex === -1) {
+                    const nextIndex = this.getNextTrackIndex(-1);
+                    if (nextIndex === null) return;
+                    await this.playTrackAtIndex(nextIndex);
+                    return;
+                }
+
+                if (musicAudio.paused) {
+                    try {
+                        await musicAudio.play();
+                        musicCurrentIndex = this.currentIndex;
+                        updateMusicDisplay();
+                    } catch (error) {
+                        showStatus('音楽の再生に失敗しました。音源を再登録してください。', true);
+                    }
+                }
+            },
+
+            async togglePlayback() {
+                this.setupAudioElement();
+
+                if (!musicTracks.length) {
+                    showStatus('音楽ファイルが未登録です。追加してください。', true);
+                    return;
+                }
+
+                if (musicAudio.paused) {
+                    if (this.currentIndex === -1) {
+                        const nextIndex = this.getNextTrackIndex(-1);
+                        if (nextIndex === null) return;
+                        await this.playTrackAtIndex(nextIndex);
+                        return;
+                    }
+
+                    try {
+                        await musicAudio.play();
+                        updateMusicDisplay();
+                    } catch (error) {
+                        showStatus('再生に失敗しました。音源を再登録してください。', true);
+                    }
+                    return;
+                }
+
+                musicAudio.pause();
+                updateMusicDisplay();
+            },
+
+            async playTrackAtIndex(index) {
+                if (!musicTracks[index]) return;
+                this.setupAudioElement();
+
+                try {
+                    const track = musicTracks[index];
+                    const objectUrl = await getTrackUrl(track);
+                    musicAudio.src = objectUrl;
+                    musicAudio.load();
+                    await musicAudio.play();
+                    musicCurrentIndex = index;
+                    this.currentIndex = index;
+                    updateMusicDisplay();
+                } catch (error) {
+                    showStatus(error.message || '音楽データを取得できませんでした。再登録してください。', true);
+                    this.stopPlayback();
+                }
+            },
+
+            getNextTrackIndex(currentIndex) {
+                if (!musicTracks.length) return null;
+                if (musicTracks.length === 1) return 0;
+
+                if (musicPlayMode === 'random') {
+                    const candidates = musicTracks
+                        .map((_, index) => index)
+                        .filter((index) => index !== currentIndex);
+
+                    if (!candidates.length) {
+                        return currentIndex;
+                    }
+
+                    if (candidates.length === 1) {
+                        return candidates[0];
+                    }
+
+                    let nextIndex = candidates[Math.floor(Math.random() * candidates.length)];
+                    while (nextIndex === lastRandomIndex && candidates.length > 1) {
+                        nextIndex = candidates[Math.floor(Math.random() * candidates.length)];
+                    }
+                    lastRandomIndex = nextIndex;
+                    return nextIndex;
+                }
+
+                if (currentIndex >= musicTracks.length - 1) {
+                    return 0;
+                }
+                return currentIndex + 1;
+            },
+
+            async advanceToNextTrack() {
+                if (!musicTracks.length) {
+                    this.stopPlayback();
+                    return;
+                }
+
+                const nextIndex = this.getNextTrackIndex(this.currentIndex);
+                if (nextIndex === null) {
+                    this.stopPlayback();
+                    return;
+                }
+
+                await this.playTrackAtIndex(nextIndex);
+            },
+
+            stopPlayback() {
+                if (!musicAudio) return;
+                musicAudio.pause();
+                musicAudio.currentTime = 0;
+                musicAudio.src = '';
+                musicCurrentIndex = -1;
+                this.currentIndex = -1;
+                updateMusicDisplay();
+            },
+
+            async handleAddedTracks(fileList) {
+                if (!fileList || !fileList.length) {
+                    return;
+                }
+
+                const validFiles = [];
+                Array.from(fileList).forEach((file) => {
+                    if (isSupportedMusicFile(file)) {
+                        validFiles.push(file);
+                    }
+                });
+
+                if (!validFiles.length) {
+                    showStatus('対応していない音声形式です。mp3, wav, m4a, aac, ogg, webmのファイルを選択してください。', true);
+                    return;
+                }
+
+                const preparedTracks = validFiles.map((file) => ({
+                    id: generateTrackId(),
+                    name: file.name,
+                    file,
+                    size: file.size,
+                    type: file.type || 'audio/*',
+                    order: Date.now() + Math.random()
+                }));
+
+                try {
+                    await saveTracksToDatabase(preparedTracks);
+                    musicTracks = [...musicTracks, ...preparedTracks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                    updateMusicDisplay();
+                    showStatus(`${preparedTracks.length}曲を追加しました。`);
+                } catch (error) {
+                    showStatus(error.message || '音楽の保存に失敗しました。容量や端末の制限を確認してください。', true);
+                }
+            },
+
+            async removeTrack(trackId) {
+                const targetIndex = musicTracks.findIndex((track) => track.id === trackId);
+                if (targetIndex < 0) return;
+
+                const track = musicTracks[targetIndex];
+                if (track && track.url && track.url.startsWith('blob:')) {
+                    URL.revokeObjectURL(track.url);
+                }
+
+                try {
+                    await deleteTrackFromDatabase(trackId);
+                    musicTracks = musicTracks.filter((trackItem) => trackItem.id !== trackId);
+
+                    if (musicCurrentIndex === targetIndex) {
+                        musicCurrentIndex = -1;
+                        this.currentIndex = -1;
+                        musicAudio.pause();
+                        musicAudio.currentTime = 0;
+                        musicAudio.src = '';
+                    } else if (musicCurrentIndex > targetIndex) {
+                        musicCurrentIndex -= 1;
+                        this.currentIndex = musicCurrentIndex;
+                    }
+
+                    updateMusicDisplay();
+                    showStatus('曲を削除しました。');
+                } catch (error) {
+                    showStatus(error.message || '曲の削除に失敗しました。', true);
+                }
+            }
+        };
+
+        function bindMusicControls() {
+            const musicAddButton = document.getElementById('musicAddButton');
+            const musicFileInput = document.getElementById('musicFileInput');
+            const musicModeSelect = document.getElementById('musicModeSelect');
+            const musicToggleButton = document.getElementById('musicToggleButton');
+
+            musicAddButton.addEventListener('click', () => {
+                musicFileInput.click();
+            });
+
+            musicFileInput.addEventListener('change', async (event) => {
+                const files = event.target.files;
+                if (!files || !files.length) {
+                    return;
+                }
+                await musicController.handleAddedTracks(files);
+                musicFileInput.value = '';
+            });
+
+            musicModeSelect.addEventListener('change', async (event) => {
+                musicPlayMode = event.target.value;
+                await storeMusicSettings('playMode', musicPlayMode);
+                updateMusicDisplay();
+            });
+
+            musicToggleButton.addEventListener('click', () => {
+                musicController.togglePlayback();
+            });
+        }
+
+        window.addEventListener("DOMContentLoaded", () => {
+            showSettingsScreen();
+            bindMusicControls();
+            musicController.initialize();
+
+            window.addEventListener("keydown", (event) => {
+                if (event.code !== 'Space') return;
+                const timerScreen = document.getElementById("timerScreen");
+                if (timerScreen.classList.contains("hidden")) return;
+                event.preventDefault();
+                togglePause();
+            });
+        });
 
     </script>
 
