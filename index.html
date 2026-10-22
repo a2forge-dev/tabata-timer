@@ -1001,162 +1001,97 @@
                 await this.playTrackAtIndex(nextIndex);
             },
 
-            stopPlayback() {
-                if (musicAudio) {
-                    musicAudio.pause();
-                    musicAudio.currentTime = 0;
-                    musicAudio.src = '';
-                }
-                if (currentMusicObjectUrl && currentMusicObjectUrl.startsWith('blob:')) {
-                    URL.revokeObjectURL(currentMusicObjectUrl);
-                    currentMusicObjectUrl = '';
-                }
+            async stopPlayback() {
+                if (!musicAudio) return;
+                musicAudio.pause();
+                musicAudio.currentTime = 0;
+                musicAudio.src = '';
                 musicCurrentIndex = -1;
                 this.currentIndex = -1;
                 musicIsPlaying = false;
                 updateMusicDisplay();
             },
 
-            async handleAddedTracks(fileList) {
-                if (!fileList || !fileList.length) {
-                    return;
+            removeTrack(trackId) {
+                const trackIndex = musicTracks.findIndex((track) => track.id === trackId);
+                if (trackIndex === -1) return;
+
+                const [removedTrack] = musicTracks.splice(trackIndex, 1);
+                const newIndex = musicSelectedIndex >= musicTracks.length ? 0 : musicSelectedIndex;
+                musicSelectedIndex = newIndex;
+
+                if (removedTrack && removedTrack.objectUrl && removedTrack.objectUrl.startsWith('blob:')) {
+                    URL.revokeObjectURL(removedTrack.objectUrl);
                 }
 
-                const validFiles = [];
-                Array.from(fileList).forEach((file) => {
-                    if (isSupportedMusicFile(file)) {
-                        validFiles.push(file);
+                saveTracksToDatabase(musicTracks).catch(() => {});
+                deleteTrackFromDatabase(trackId).catch(() => {});
+                if (musicCurrentIndex === trackIndex) {
+                    musicCurrentIndex = -1;
+                    this.currentIndex = -1;
+                    if (musicAudio) {
+                        musicAudio.pause();
+                        musicAudio.src = '';
                     }
-                });
-
-                if (!validFiles.length) {
-                    showStatus('対応していない音声形式です。mp3, wav, m4a, aac, ogg, webmのファイルを選択してください。', true);
-                    return;
                 }
-
-                const preparedTracks = [];
-                for (const file of validFiles) {
-                    const data = await file.arrayBuffer();
-                    preparedTracks.push({
-                        id: generateTrackId(),
-                        name: file.name,
-                        data,
-                        mimeType: file.type || 'audio/*',
-                        size: file.size,
-                        type: file.type || 'audio/*',
-                        order: Date.now() + Math.random()
-                    });
-                }
-
-                try {
-                    await saveTracksToDatabase(preparedTracks);
-                    musicTracks = [...musicTracks, ...preparedTracks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-                    if (musicSelectedIndex < 0 || musicSelectedIndex >= musicTracks.length) {
-                        musicSelectedIndex = 0;
-                    }
-                    updateMusicDisplay();
-                    showStatus(`${preparedTracks.length}曲を追加しました。`);
-                } catch (error) {
-                    showStatus(error.message || '音楽の保存に失敗しました。容量や端末の制限を確認してください。', true);
-                }
-            },
-
-            async removeTrack(trackId) {
-                const targetIndex = musicTracks.findIndex((track) => track.id === trackId);
-                if (targetIndex < 0) return;
-
-                const track = musicTracks[targetIndex];
-                if (track.objectUrl && track.objectUrl.startsWith('blob:')) {
-                    URL.revokeObjectURL(track.objectUrl);
-                }
-
-                try {
-                    await deleteTrackFromDatabase(trackId);
-                    musicTracks = musicTracks.filter((trackItem) => trackItem.id !== trackId);
-
-                    if (musicCurrentIndex === targetIndex) {
-                        musicCurrentIndex = -1;
-                        this.currentIndex = -1;
-                        if (musicAudio) {
-                            musicAudio.pause();
-                            musicAudio.currentTime = 0;
-                            musicAudio.src = '';
-                        }
-                    } else if (musicCurrentIndex > targetIndex) {
-                        musicCurrentIndex -= 1;
-                        this.currentIndex = musicCurrentIndex;
-                    }
-
-                    if (musicSelectedIndex === targetIndex) {
-                        musicSelectedIndex = Math.min(targetIndex, Math.max(0, musicTracks.length - 1));
-                    } else if (musicSelectedIndex > targetIndex) {
-                        musicSelectedIndex -= 1;
-                    }
-
-                    if (musicSelectedIndex < 0) {
-                        musicSelectedIndex = 0;
-                    }
-
-                    updateMusicDisplay();
-                    showStatus('曲を削除しました。');
-                } catch (error) {
-                    showStatus(error.message || '曲の削除に失敗しました。', true);
-                }
+                updateMusicDisplay();
             }
         };
 
-        function bindMusicControls() {
-            const musicAddButton = document.getElementById('musicAddButton');
-            const musicFileInput = document.getElementById('musicFileInput');
-            const musicModeSelect = document.getElementById('musicModeSelect');
-            const musicToggleButton = document.getElementById('musicToggleButton');
-            const timerMusicToggleButton = document.getElementById('timerMusicToggleButton');
-
-            musicAddButton.addEventListener('click', () => {
-                musicFileInput.click();
-            });
-
-            musicFileInput.addEventListener('change', async (event) => {
-                const files = event.target.files;
-                if (!files || !files.length) {
-                    return;
-                }
-                await musicController.handleAddedTracks(files);
-                musicFileInput.value = '';
-            });
-
-            musicModeSelect.addEventListener('change', async (event) => {
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('musicModeSelect').addEventListener('change', async (event) => {
                 musicPlayMode = event.target.value;
-                await storeMusicSettings('playMode', musicPlayMode);
-                updateMusicDisplay();
+                await storeMusicSettings('playMode', musicPlayMode).catch(() => {});
+                if (musicAudio && !musicAudio.paused && musicTracks.length > 1) {
+                    const nextIndex = musicController.getNextTrackIndex(musicCurrentIndex);
+                    if (nextIndex !== null && nextIndex !== musicCurrentIndex) {
+                        await musicController.playTrackAtIndex(nextIndex);
+                    }
+                }
             });
 
-            musicToggleButton.addEventListener('click', () => {
+            document.getElementById('musicToggleButton').addEventListener('click', () => {
                 musicController.togglePlayback();
             });
 
-            if (timerMusicToggleButton) {
-                timerMusicToggleButton.addEventListener('click', () => {
-                    musicController.togglePlayback();
-                });
-            }
-        }
-
-        window.addEventListener("DOMContentLoaded", () => {
-            showSettingsScreen();
-            bindMusicControls();
-            musicController.initialize();
-
-            window.addEventListener("keydown", (event) => {
-                if (event.code !== 'Space') return;
-                const timerScreen = document.getElementById("timerScreen");
-                if (timerScreen.classList.contains("hidden")) return;
-                event.preventDefault();
-                togglePause();
+            document.getElementById('timerMusicToggleButton').addEventListener('click', () => {
+                musicController.togglePlayback();
             });
+
+            document.getElementById('musicAddButton').addEventListener('click', () => {
+                document.getElementById('musicFileInput').click();
+            });
+
+            document.getElementById('musicFileInput').addEventListener('change', async (event) => {
+                const files = Array.from(event.target.files || []);
+                if (!files.length) return;
+
+                const validFiles = files.filter((file) => isSupportedMusicFile(file));
+                if (!validFiles.length) {
+                    showStatus('対応していない音楽形式です。', true);
+                    event.target.value = '';
+                    return;
+                }
+
+                const nextTracks = validFiles.map((file) => ({
+                    id: generateTrackId(),
+                    name: file.name,
+                    file,
+                    type: file.type,
+                    order: Date.now() + Math.random(),
+                }));
+
+                const mergedTracks = [...musicTracks, ...nextTracks];
+                musicTracks = mergedTracks;
+                musicSelectedIndex = musicTracks.length - nextTracks.length;
+                await saveTracksToDatabase(musicTracks).catch(() => {});
+                updateMusicDisplay();
+                event.target.value = '';
+            });
+
+            musicController.initialize();
         });
     </script>
-
 </body>
 
 </html>
