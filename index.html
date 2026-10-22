@@ -161,7 +161,6 @@
             background: rgba(255, 255, 255, 0.08);
             margin-bottom: 6px;
             font-size: 14px;
-            cursor: pointer;
         }
 
         .music-playlist li.current-track,
@@ -175,6 +174,13 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            text-align: left;
+            background: transparent;
+            border: none;
+            color: white;
+            font: inherit;
+            cursor: pointer;
+            padding: 0;
         }
 
         .music-delete-button {
@@ -182,6 +188,7 @@
             padding: 8px 12px;
             margin: 0;
             border-radius: 6px;
+            cursor: pointer;
         }
 
         .music-small-button {
@@ -294,7 +301,6 @@
     </div>
 
     <script>
-
         const MUSIC_DB_NAME = 'tabataTimerMusicDb';
         const MUSIC_DB_VERSION = 1;
         const SUPPORTED_MUSIC_TYPES = [
@@ -388,6 +394,12 @@
             setElement.textContent = `セット ${currentSet} / ${totalSets}`;
         }
 
+        function selectTrack(index) {
+            if (!musicTracks[index]) return;
+            musicSelectedIndex = index;
+            updateMusicDisplay();
+        }
+
         function updateMusicDisplay() {
             const musicStatus = document.getElementById('musicStatus');
             const button = document.getElementById('musicToggleButton');
@@ -401,6 +413,13 @@
 
             list.innerHTML = '';
 
+            if (!musicTracks.length) {
+                const emptyItem = document.createElement('li');
+                emptyItem.textContent = '音楽が未登録です';
+                list.appendChild(emptyItem);
+                return;
+            }
+
             musicTracks.forEach((track, index) => {
                 const item = document.createElement('li');
                 if (index === musicCurrentIndex) {
@@ -410,24 +429,27 @@
                     item.classList.add('selected-track');
                 }
 
-                const name = document.createElement('span');
-                name.className = 'music-track-name';
-                name.textContent = track.name;
+                const nameButton = document.createElement('button');
+                nameButton.type = 'button';
+                nameButton.className = 'music-track-name';
+                nameButton.textContent = track.name;
+                nameButton.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    selectTrack(index);
+                });
 
                 const deleteButton = document.createElement('button');
                 deleteButton.type = 'button';
                 deleteButton.className = 'music-delete-button';
                 deleteButton.textContent = '削除';
                 deleteButton.addEventListener('click', (event) => {
+                    event.preventDefault();
                     event.stopPropagation();
                     musicController.removeTrack(track.id);
                 });
 
-                item.addEventListener('click', () => {
-                    musicController.selectTrack(index);
-                });
-
-                item.appendChild(name);
+                item.appendChild(nameButton);
                 item.appendChild(deleteButton);
                 list.appendChild(item);
             });
@@ -812,12 +834,6 @@
         const musicController = {
             currentIndex: -1,
 
-            selectTrack(index) {
-                if (index < 0 || index >= musicTracks.length) return;
-                musicSelectedIndex = index;
-                updateMusicDisplay();
-            },
-
             ensureAudio() {
                 if (!musicAudio) {
                     musicAudio = new Audio();
@@ -853,7 +869,7 @@
                 if (!musicTracks.length) return;
                 this.ensureAudio();
 
-                const startIndex = this.currentIndex === -1 ? musicSelectedIndex : this.currentIndex;
+                const startIndex = musicSelectedIndex;
                 if (this.currentIndex === -1) {
                     if (startIndex >= 0 && startIndex < musicTracks.length) {
                         await this.playTrackAtIndex(startIndex);
@@ -1072,6 +1088,10 @@
                         musicSelectedIndex -= 1;
                     }
 
+                    if (musicSelectedIndex < 0) {
+                        musicSelectedIndex = 0;
+                    }
+
                     updateMusicDisplay();
                     showStatus('曲を削除しました。');
                 } catch (error) {
@@ -1123,7 +1143,6 @@
                 togglePause();
             });
         });
-
     </script>
 
 </body>
