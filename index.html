@@ -161,9 +161,11 @@
             background: rgba(255, 255, 255, 0.08);
             margin-bottom: 6px;
             font-size: 14px;
+            cursor: pointer;
         }
 
-        .music-playlist li.current-track {
+        .music-playlist li.current-track,
+        .music-playlist li.selected-track {
             background: rgba(255, 255, 255, 0.2);
             border: 1px solid rgba(255, 255, 255, 0.35);
         }
@@ -326,6 +328,7 @@
         let musicPlayMode = 'sequence';
         let musicAudio = null;
         let musicCurrentIndex = -1;
+        let musicSelectedIndex = 0;
         let lastRandomIndex = -1;
         let musicIsPlaying = false;
         let currentMusicObjectUrl = '';
@@ -403,6 +406,9 @@
                 if (index === musicCurrentIndex) {
                     item.classList.add('current-track');
                 }
+                if (index === musicSelectedIndex) {
+                    item.classList.add('selected-track');
+                }
 
                 const name = document.createElement('span');
                 name.className = 'music-track-name';
@@ -412,7 +418,14 @@
                 deleteButton.type = 'button';
                 deleteButton.className = 'music-delete-button';
                 deleteButton.textContent = '削除';
-                deleteButton.addEventListener('click', () => removeTrack(track.id));
+                deleteButton.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    musicController.removeTrack(track.id);
+                });
+
+                item.addEventListener('click', () => {
+                    musicController.selectTrack(index);
+                });
 
                 item.appendChild(name);
                 item.appendChild(deleteButton);
@@ -724,6 +737,11 @@
                 request.onsuccess = () => {
                     const tracks = (request.result || []).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
                     musicTracks = tracks;
+                    if (!musicTracks.length) {
+                        musicSelectedIndex = 0;
+                    } else if (musicSelectedIndex >= musicTracks.length) {
+                        musicSelectedIndex = 0;
+                    }
                     resolve(tracks);
                 };
                 request.onerror = () => reject(request.error || new Error('保存済み音楽の読込に失敗しました。'));
@@ -794,6 +812,12 @@
         const musicController = {
             currentIndex: -1,
 
+            selectTrack(index) {
+                if (index < 0 || index >= musicTracks.length) return;
+                musicSelectedIndex = index;
+                updateMusicDisplay();
+            },
+
             ensureAudio() {
                 if (!musicAudio) {
                     musicAudio = new Audio();
@@ -829,10 +853,11 @@
                 if (!musicTracks.length) return;
                 this.ensureAudio();
 
+                const startIndex = this.currentIndex === -1 ? musicSelectedIndex : this.currentIndex;
                 if (this.currentIndex === -1) {
-                    const nextIndex = this.getNextTrackIndex(-1);
-                    if (nextIndex === null) return;
-                    await this.playTrackAtIndex(nextIndex);
+                    if (startIndex >= 0 && startIndex < musicTracks.length) {
+                        await this.playTrackAtIndex(startIndex);
+                    }
                     return;
                 }
 
@@ -856,9 +881,8 @@
                 }
 
                 if (musicAudio.paused) {
+                    const nextIndex = this.currentIndex === -1 ? musicSelectedIndex : this.currentIndex;
                     if (this.currentIndex === -1) {
-                        const nextIndex = this.getNextTrackIndex(-1);
-                        if (nextIndex === null) return;
                         await this.playTrackAtIndex(nextIndex);
                         return;
                     }
@@ -898,6 +922,7 @@
                     await musicAudio.play();
                     musicCurrentIndex = index;
                     this.currentIndex = index;
+                    musicSelectedIndex = index;
                     musicIsPlaying = true;
                     updateMusicDisplay();
                 } catch (error) {
@@ -1005,6 +1030,9 @@
                 try {
                     await saveTracksToDatabase(preparedTracks);
                     musicTracks = [...musicTracks, ...preparedTracks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                    if (musicSelectedIndex < 0 || musicSelectedIndex >= musicTracks.length) {
+                        musicSelectedIndex = 0;
+                    }
                     updateMusicDisplay();
                     showStatus(`${preparedTracks.length}曲を追加しました。`);
                 } catch (error) {
@@ -1036,6 +1064,12 @@
                     } else if (musicCurrentIndex > targetIndex) {
                         musicCurrentIndex -= 1;
                         this.currentIndex = musicCurrentIndex;
+                    }
+
+                    if (musicSelectedIndex === targetIndex) {
+                        musicSelectedIndex = Math.min(targetIndex, Math.max(0, musicTracks.length - 1));
+                    } else if (musicSelectedIndex > targetIndex) {
+                        musicSelectedIndex -= 1;
                     }
 
                     updateMusicDisplay();
